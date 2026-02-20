@@ -169,8 +169,10 @@ module emu
 	// 1 - D-/TX
 	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
-	input   [6:0] USER_IN,
-	output  [6:0] USER_OUT,
+	output        USER_OSD,
+	output  [1:0] USER_MODE,
+	input   [7:0] USER_IN,
+	output  [7:0] USER_OUT,
 
 	input         OSD_STATUS
 );
@@ -178,6 +180,16 @@ module emu
 //`define DEBUG
 
 assign ADC_BUS  = 'Z;
+
+wire         CLK_JOY = CLK_50M & ~mt32_use;         //Assign clock between 40-50Mhz
+wire   [2:0] JOY_FLAG  = mt32_use ? 3'b000 : {status[62],status[63],status[61]}; //Assign 3 bits of status (31:29) o (63:61)
+wire         JOY_CLK, JOY_LOAD, JOY_SPLIT, JOY_MDSEL;
+wire   [5:0] JOY_MDIN  = JOY_FLAG[2] ? {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]} : '1;
+wire         JOY_DATA  = JOY_FLAG[1] ? USER_IN[5] : '1;
+//assign       USER_OUT  = JOY_FLAG[2] ? {3'b111,JOY_SPLIT,3'b111,JOY_MDSEL} : JOY_FLAG[1] ? {6'b111111,JOY_CLK,JOY_LOAD} : '1;
+assign       USER_MODE = JOY_FLAG[2:1] ;
+assign       USER_OSD  = joydb_1[10] & joydb_1[6];
+
 assign {SDRAM_A, SDRAM_BA, SDRAM_DQ, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
@@ -255,6 +267,9 @@ localparam CONF_STR =
 	"P2oFG,Joystick Mode,2 Joysticks,2 Sticks,2 Wheels,4-axes Wheel;",
 	"P2oH,Joystick 1,Enabled,Disabled;",
 	"P2oI,Joystick 2,Enabled,Disabled;",
+	"P2-;",
+	"P2oUV,UserIO Joystick,Off,DB9MD,DB15 ;",
+	"P2oT,UserIO Players, 1 Player,2 Players;",
 
 	"h3P3,MT32-pi;",
 	"h3P3-;",
@@ -303,8 +318,8 @@ wire        ps2_mouse_data_in;
 wire  [1:0] buttons;
 wire [63:0] status;
 
-wire [13:0] joystick_0;
-wire [13:0] joystick_1;
+wire [13:0] joystick_0_USB;
+wire [13:0] joystick_1_USB;
 wire [15:0] joystick_l_analog_0;
 wire [15:0] joystick_l_analog_1;
 wire [15:0] joystick_r_analog_0;
@@ -313,6 +328,40 @@ wire [15:0] joystick_r_analog_1;
 wire [21:0] gamma_bus;
 wire  [7:0] uart1_mode;
 wire [31:0] uart1_speed;
+
+wire [13:0] joystick_0 = joydb_1ena ? (OSD_STATUS? 14'b0 : {joydb_1[7:0]}) : joystick_0_USB;
+wire [13:0] joystick_1 = joydb_2ena ? (OSD_STATUS? 14'b0 : {joydb_1[7:0]}) : joydb_1ena ? joystick_0_USB : joystick_1_USB;
+
+wire [15:0] joydb_1 = JOY_FLAG[2] ? JOYDB9MD_1 : JOY_FLAG[1] ? JOYDB15_1 : '0;
+wire [15:0] joydb_2 = JOY_FLAG[2] ? JOYDB9MD_2 : JOY_FLAG[1] ? JOYDB15_2 : '0;
+wire        joydb_1ena = |JOY_FLAG[2:1]              ;
+wire        joydb_2ena = |JOY_FLAG[2:1] & JOY_FLAG[0];
+
+//----BA 9876543210
+//----MS ZYXCBAUDLR
+reg [15:0] JOYDB9MD_1,JOYDB9MD_2;
+joy_db9md joy_db9md
+(
+  .clk       ( CLK_JOY    ), //40-50MHz
+  .joy_split ( JOY_SPLIT  ),
+  .joy_mdsel ( JOY_MDSEL  ),
+  .joy_in    ( JOY_MDIN   ),
+  .joystick1 ( JOYDB9MD_1 ),
+  .joystick2 ( JOYDB9MD_2 )
+);
+
+//----BA 9876543210
+//----LS FEDCBAUDLR
+reg [15:0] JOYDB15_1,JOYDB15_2;
+joy_db15 joy_db15
+(
+  .clk       ( CLK_JOY   ), //48MHz
+  .JOY_CLK   ( JOY_CLK   ),
+  .JOY_DATA  ( JOY_DATA  ),
+  .JOY_LOAD  ( JOY_LOAD  ),
+  .joystick1 ( JOYDB15_1 ),
+  .joystick2 ( JOYDB15_2 )
+);
 
 hps_io #(.CONF_STR(CONF_STR), .CONF_STR_BRAM(0), .PS2DIV(2000), .PS2WE(1), .WIDE(1)) hps_io
 (
@@ -342,8 +391,9 @@ hps_io #(.CONF_STR(CONF_STR), .CONF_STR_BRAM(0), .PS2DIV(2000), .PS2WE(1), .WIDE
 	.uart_mode(uart1_mode),
 	.uart_speed(uart1_speed),
 
-	.joystick_0(joystick_0),
-	.joystick_1(joystick_1),
+	.joystick_0(joystick_0_USB),
+	.joystick_1(joystick_1_USB),
+	.joy_raw(OSD_STATUS? (joydb_1[11:0] | joydb_2[11:0]) : 12'b0),
 	.joystick_l_analog_0(joystick_l_analog_0),
 	.joystick_l_analog_1(joystick_l_analog_1),
 	.joystick_r_analog_0(joystick_r_analog_0),
@@ -560,7 +610,7 @@ assign UART_TXD  = ~hps_mpu ? uart1_tx : (mpu_tx & ~mt32_use);
 
 wire user_io_mode = status[10];
 
-assign USER_OUT = user_io_mode ? {1'b1, 1'b1, uart2_dtr, 1'b1, uart2_rts, uart2_tx, 1'b1} : mt32_out;
+assign USER_OUT = JOY_FLAG[2] ? {3'b111,JOY_SPLIT,3'b111,JOY_MDSEL} : JOY_FLAG[1] ? {6'b111111,JOY_CLK,JOY_LOAD} : user_io_mode ? {1'b1, 1'b1, uart2_dtr, 1'b1, uart2_rts, uart2_tx, 1'b1} : mt32_out;
 
 //
 // Pin | USB Name |   |Signal
@@ -951,7 +1001,7 @@ mt32pi mt32pi
 (
 	.*,
 	.reset(mt32_reset),
-	.USER_IN(user_io_mode ? 7'h7F : USER_IN),
+	.USER_IN(JOY_FLAG[2:1] ? 7'h7F : user_io_mode ? 7'h7F : USER_IN),
 	.USER_OUT(mt32_out),
 	.midi_tx(mpu_tx | mt32_mute)
 );
