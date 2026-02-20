@@ -8,7 +8,6 @@ module system
 
 	input         l1_disable,
 	input         l2_disable,
-	input         tss_fix,
 
 	output [1:0]  fdd_request,
 	output [2:0]  ide0_request,
@@ -21,6 +20,7 @@ module system
 	input  [15:0] joystick_ana_1,
 	input  [15:0] joystick_ana_2,
 	input  [1:0]  joystick_mode,
+	input  [1:0]  joystick_timed,
 
 	input  [15:0] mgmt_address,
 	input         mgmt_read,
@@ -39,7 +39,7 @@ module system
 	output        ps2_reset_n,
 
 	input   [5:0] bootcfg,
-	input         memcfg,
+  input         uma_ram,
 	output  [7:0] syscfg,
 
 	input         clk_uart1,
@@ -270,7 +270,9 @@ l2_cache cache
 
 	.VGA_WR_SEG        (video_wr_seg),
 	.VGA_RD_SEG        (video_rd_seg),
-	.VGA_FB_EN         (video_fb_en)
+	.VGA_FB_EN         (video_fb_en),
+
+	.uma_ram           (uma_ram)
 );
 
 ao486 ao486
@@ -279,7 +281,6 @@ ao486 ao486
 	.rst_n             (~reset),
 
 	.cache_disable     (l1_disable),
-	.tss_fix           (tss_fix),
 
 	.avm_address       (mem_address),
 	.avm_writedata     (mem_writedata),
@@ -550,6 +551,7 @@ joystick joystick
 
 	.clock_rate        (clock_rate),
 
+	.read              (iobus_read & joy_cs),
 	.write             (iobus_write & joy_cs),
 	.readdata          (joystick_readdata),
 
@@ -559,7 +561,8 @@ joystick joystick
 	.dig_2             (joystick_dig_2),
 	.ana_1             (joystick_ana_1),
 	.ana_2             (joystick_ana_2),
-	.mode              (joystick_mode)
+	.mode              (joystick_mode),
+	.timed             (joystick_timed)
 );
 
 pit pit
@@ -627,7 +630,6 @@ rtc rtc
 	.mgmt_write        (mgmt_write & mgmt_rtc_cs),
 	.mgmt_writedata    (mgmt_writedata[7:0]),
 
-	.memcfg            (memcfg),
 	.bootcfg           ({bootcfg[5:2], bootcfg[1:0] ? bootcfg[1:0] : {~fdd0_inserted, fdd0_inserted}}),
 
 	.irq               (irq_8)
