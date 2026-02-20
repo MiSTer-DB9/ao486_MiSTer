@@ -3,7 +3,7 @@ name: Push Release
 on:
   push:
     branches:
-      - master
+      - dev
   repository_dispatch:
     types: [push_release]
   workflow_dispatch:
