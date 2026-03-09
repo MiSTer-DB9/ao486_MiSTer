@@ -4,10 +4,10 @@
 set -euo pipefail
 
 UPSTREAM_REPO="https://github.com/MiSTer-devel/ao486_MiSTer.git"
-CORE_NAME=(ao486)
+CORE_NAME=(ao486USERIO2 ao486)
 MAIN_BRANCH="master"
-COMPILATION_INPUT=(ao486.qpf)
-COMPILATION_OUTPUT=(output_files/ao486.rbf)
+COMPILATION_INPUT=(ao486_USERIO2.qpf ao486.qpf)
+COMPILATION_OUTPUT=(output_files/ao486_USERIO2.rbf output_files/ao486.rbf)
 QUARTUS_IMAGE="theypsilon/quartus-lite-c5:17.0.2.docker0"
 
 echo "Fetching upstream:"
