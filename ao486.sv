@@ -423,8 +423,8 @@ wire  [7:0] uart1_mode;
 wire [31:0] uart1_speed;
 
 // [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: joystick mux with OSD_STATUS guard
-wire [13:0] joystick_0 = joydb_1ena ? (OSD_STATUS? 14'b0 : {joydb_1[7:0]}) : joystick_0_USB;
-wire [13:0] joystick_1 = joydb_2ena ? (OSD_STATUS? 14'b0 : {joydb_2[7:0]}) : joydb_1ena ? joystick_0_USB : joystick_1_USB;
+wire [13:0] joystick_0 = joydb_1ena ? (OSD_STATUS? 14'b0 : joydb_1_mapped[7:0]) : joystick_0_USB;
+wire [13:0] joystick_1 = joydb_2ena ? (OSD_STATUS? 14'b0 : joydb_2_mapped[7:0]) : joydb_1ena ? joystick_0_USB : joystick_1_USB;
 
 
 
