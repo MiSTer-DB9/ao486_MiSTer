@@ -238,6 +238,7 @@ wire         mt32_primary_active = mt32_on_primary & mt32_use;
 `else
 wire         mt32_primary_active = mt32_use;
 `endif
+wire         mt32_present;  // joydb BCLK detector: RPi streaming I2S
 // [MiSTer-DB9 END]
 // [MiSTer-DB9 BEGIN] - DB9 programmable-remap matrix wires
 // joydb_*_mapped = MiSTer-standard joystick words (consumed in Layer B);
@@ -278,6 +279,7 @@ joydb joydb (
   .remap_default_db9md ( db9_remap_default_db9md ),
   .joydb_1_mapped  ( joydb_1_mapped     ),
   .joydb_2_mapped  ( joydb_2_mapped     ),
+  .mt32_present    ( mt32_present       ),
   .joy_raw         ( joy_raw_payload )
 );
 // USER_OUT driven below (composes wrapper output with UART2 / MT32 fallback).
@@ -698,20 +700,22 @@ assign UART_TXD  = ~hps_mpu ? uart1_tx : (mpu_tx & ~mt32_use);
 wire user_io_mode = status[10];
 
 // [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: USER_OUT compose
-// Priority: DB9 wrapper (joy_any_en) > MT32-pi (mt32_use, Gate 2) > UART2 (user_io_mode) > idle.
-// MT32 anti-contention double-gate: USER_IN_MT32 masking (Gate 1) is below; the
-// mt32_use AND-gate here (Gate 2) ensures MT32 only drives the shared USER_IO when
-// the RPi has been detected, preventing boot-window contention with DB9 controllers.
+// Priority: DB9 wrapper (joy_any_en) > MT32-pi (Gate 2) > UART2 (user_io_mode) > idle.
+// MT32 anti-contention double-gate: USER_IN_MT32 masking (Gate 1) is below. Gate 2
+// here lets MT32 drive the shared USER_IO only once an RPi is detected, by its I2C
+// (mt32_use) or by its I2S bit clock (mt32_present, for an RPi with no I2C on the
+// user port, e.g. Decapod). With no RPi it stays shut, so no boot-window contention
+// with DB9 controllers.
 `ifdef SECOND_MT32
 // USERIO2 build: MT32 drives primary USER_IO only if user routes it there.
 assign USER_OUT = joy_any_en ? USER_OUT_DRIVE
-                : (mt32_on_primary & mt32_use) ? {1'b1, mt32_out}
+                : (mt32_on_primary & (mt32_use | (mt32_present & ~mt32_disable))) ? {1'b1, mt32_out}
                 : user_io_mode ? {1'b1, 1'b1, uart2_dtr, 1'b1, uart2_rts, uart2_tx, 1'b1}
                 : 8'hFF;
 `else
-// Standard build: MT32 always shares USER_IO (gated on mt32_use).
+// Standard build: MT32 always shares USER_IO (Gate 2).
 assign USER_OUT = joy_any_en ? USER_OUT_DRIVE
-                : mt32_use ? {1'b1, mt32_out}
+                : (mt32_use | (mt32_present & ~mt32_disable)) ? {1'b1, mt32_out}
                 : user_io_mode ? {1'b1, 1'b1, uart2_dtr, 1'b1, uart2_rts, uart2_tx, 1'b1}
                 : 8'hFF;
 `endif
